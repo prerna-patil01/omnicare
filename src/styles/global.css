@@ -1,0 +1,310 @@
+@import "tailwindcss";
+
+/* Theme is driven by a class on <html>, not the media query alone, so the
+   in-app toggle can override the OS preference in both directions. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------------------------------------------------------------------------
+   Design tokens — light ground (warm cream)
+   Every colour in the app resolves through these. Components never hardcode
+   a hex value; that is what makes the dark ground a token swap rather than a
+   second stylesheet.
+--------------------------------------------------------------------------- */
+:root {
+  --bg: #faf6ee;
+  --surface: #fffdf7;
+  --surface-2: #f4eee2;
+
+  --ink: #14181f;
+  --ink-muted: #6b6055;
+  --ink-faint: #938a7c;
+
+  --primary: #21488c;
+  --primary-hover: #1a3a73;
+  --primary-fg: #fdfbf6;
+  --primary-wash: #e8edf6;
+
+  --accent: #ff6b35;
+  --accent-hover: #ea5a26;
+  --accent-fg: #ffffff;
+  --accent-wash: #ffeee7;
+
+  --border: rgb(33 72 140 / 0.14);
+  --border-strong: rgb(33 72 140 / 0.26);
+
+  --sage: #3f7355;
+  --sage-bg: #e7f0e8;
+  --amber: #9c6a15;
+  --amber-bg: #f8edd8;
+  --rose: #a83a55;
+  --rose-bg: #fae6e9;
+
+  /* Deep-blue hero panel. Holds its own palette in both themes because it is
+     always a dark surface with cream type on it. */
+  --hero-from: #21488c;
+  --hero-to: #16305e;
+  --hero-fg: #f6f1e6;
+  --hero-fg-muted: rgb(246 241 230 / 0.7);
+  --hero-border: rgb(246 241 230 / 0.16);
+  --hero-inset: rgb(255 253 247 / 0.07);
+  --hero-glow: rgb(255 107 53 / 0.4);
+
+  --shadow-soft: 0 1px 2px rgb(20 24 31 / 0.04), 0 10px 28px -14px rgb(33 72 140 / 0.2);
+  --shadow-lift: 0 2px 4px rgb(20 24 31 / 0.05), 0 18px 40px -18px rgb(33 72 140 / 0.28);
+}
+
+/* Dark ground (deep navy) — same token names, retuned values. */
+:root.dark {
+  --bg: #0f1520;
+  --surface: #161e2c;
+  --surface-2: #1c2536;
+
+  --ink: #f2ede3;
+  --ink-muted: #a79e8e;
+  --ink-faint: #7d7565;
+
+  --primary: #7ba4e8;
+  --primary-hover: #96b7ee;
+  --primary-fg: #0f1520;
+  --primary-wash: rgb(123 164 232 / 0.14);
+
+  --accent: #ff7d4d;
+  --accent-hover: #ff9169;
+  --accent-fg: #1a0e07;
+  --accent-wash: rgb(255 125 77 / 0.14);
+
+  --border: rgb(123 164 232 / 0.18);
+  --border-strong: rgb(123 164 232 / 0.32);
+
+  --sage: #86be9b;
+  --sage-bg: rgb(63 115 85 / 0.24);
+  --amber: #e0ab55;
+  --amber-bg: rgb(156 106 21 / 0.26);
+  --rose: #e58399;
+  --rose-bg: rgb(168 58 85 / 0.26);
+
+  --hero-from: #1c3d78;
+  --hero-to: #101f3d;
+  --hero-fg: #f2ede3;
+  --hero-fg-muted: rgb(242 237 227 / 0.68);
+  --hero-border: rgb(242 237 227 / 0.14);
+  --hero-inset: rgb(242 237 227 / 0.06);
+  --hero-glow: rgb(255 125 77 / 0.32);
+
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px -14px rgb(0 0 0 / 0.6);
+  --shadow-lift: 0 2px 6px rgb(0 0 0 / 0.45), 0 18px 40px -18px rgb(0 0 0 / 0.7);
+}
+
+/* Map tokens into Tailwind's utility namespace. `inline` keeps the var
+   reference live at the use site, so utilities follow the theme swap. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-fg: var(--primary-fg);
+  --color-primary-wash: var(--primary-wash);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-wash: var(--accent-wash);
+
+  --color-edge: var(--border);
+  --color-edge-strong: var(--border-strong);
+
+  --color-sage: var(--sage);
+  --color-sage-bg: var(--sage-bg);
+  --color-amber: var(--amber);
+  --color-amber-bg: var(--amber-bg);
+  --color-rose: var(--rose);
+  --color-rose-bg: var(--rose-bg);
+
+  --color-hero-fg: var(--hero-fg);
+  --color-hero-fg-muted: var(--hero-fg-muted);
+  --color-hero-border: var(--hero-border);
+
+  /* Serif throughout, per the brand — a Swiss medical journal, not a SaaS app. */
+  --font-serif: "Times New Roman", Times, "Liberation Serif", "Nimbus Roman", serif;
+
+  --shadow-soft: var(--shadow-soft);
+  --shadow-lift: var(--shadow-lift);
+
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Base
+--------------------------------------------------------------------------- */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-serif);
+    font-size: 1rem;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Editorial headings: tight tracking, balanced wrapping. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.018em;
+    text-wrap: balance;
+    line-height: 1.14;
+    font-weight: 700;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background-color: var(--accent);
+    color: var(--accent-fg);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--ink-faint);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Composed utilities used across pages
+--------------------------------------------------------------------------- */
+@utility card-lux {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1.5rem;
+  box-shadow: var(--shadow-soft);
+}
+
+@utility label-eyebrow {
+  font-size: 0.68rem;
+  line-height: 1.2;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 700;
+}
+
+@utility num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Deep-blue hero panel with a blurred coral glow behind the type. */
+@utility hero-panel {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  border: 1px solid var(--hero-border);
+  background-image: linear-gradient(150deg, var(--hero-from) 0%, var(--hero-to) 100%);
+  color: var(--hero-fg);
+}
+
+.hero-panel::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset-inline-end: -8%;
+  inset-block-start: -30%;
+  width: 26rem;
+  height: 26rem;
+  border-radius: 9999px;
+  background: radial-gradient(circle, var(--hero-glow) 0%, transparent 68%);
+  filter: blur(28px);
+  pointer-events: none;
+}
+
+/* Loading shimmer for skeletons. */
+@utility shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--surface-2) 0%,
+    color-mix(in oklab, var(--surface-2) 60%, var(--surface)) 50%,
+    var(--surface-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: omni-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes omni-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes omni-pulse-node {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes omni-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility rise {
+  animation: omni-rise 0.4s cubic-bezier(0.2, 0.6, 0.2, 1) both;
+}
