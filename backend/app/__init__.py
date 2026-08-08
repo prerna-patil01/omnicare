@@ -34,9 +34,22 @@ def create_app(config_name=None):
     # Import for the side effect of registering mappers, so Alembic
     # autogenerate sees the tables.
     from . import models  # noqa: F401
+    from .api import bp as api_bp
     from .auth.routes import bp as auth_bp
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(api_bp)
+
+    with app.app_context():
+        from .seed import seed_catalog
+
+        # Catalogue rows are reference data, not per-user state — loading them
+        # at boot keeps a fresh clone runnable without a separate seed step.
+        try:
+            seed_catalog()
+        except Exception:  # pragma: no cover - migrations may not have run yet
+            db.session.rollback()
+            app.logger.warning("Catalogue seed skipped — run `flask db upgrade` first.")
 
     _register_error_handlers(app)
     _register_jwt_handlers(app)

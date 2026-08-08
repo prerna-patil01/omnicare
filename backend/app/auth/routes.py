@@ -65,6 +65,12 @@ def register():
             "errors": {"email": "This email is already registered."},
         }), 409
 
+    # Provision the account's clinical rows so every page has real data to
+    # read on first login rather than empty states.
+    from ..seed import provision_user_health
+
+    provision_user_health(user)
+
     return jsonify({"data": {"user": user.to_dict(), **_issue_tokens(user)}}), 201
 
 
