@@ -4,49 +4,23 @@ Two distinct jobs:
 
 - `seed_catalog()` loads shared reference data (doctors, care workers,
   medicines, regional signals). Idempotent; safe to run on every boot.
-- `provision_user_health()` creates a user's own clinical rows at registration.
+- `provision_consent()` creates a user's consent scopes at registration.
 
-Both write real rows that the API then reads back. Nothing here is returned to
-the frontend directly — the difference between seeded reference data and a
-hardcoded JSON response is that this goes through the database and can be
-queried, filtered, and mutated like any other record.
+No clinical values are generated here, ever. A user's vitals, twin scores, and
+findings come only from readings they entered themselves (see `derive.py`).
+Fabricating a physiological measurement and storing it in the database does not
+make it real — it makes it indistinguishable from a real one downstream, which
+is worse than having none.
 
-Per-user values are derived deterministically from the user id, so a given
-account always sees a consistent history rather than numbers that jitter on
-every request.
+The catalogue below is the one seeded set: a marketplace needs listings before
+a partner integration exists. It is reference data about providers, not claims
+about any user's body.
 """
 
-import hashlib
-import json
 from datetime import date, datetime, timedelta, timezone
 
 from .extensions import db
-from .models import (
-    CareWorker,
-    ClinicalFinding,
-    ConsentScope,
-    Doctor,
-    Medicine,
-    OutbreakSignal,
-    Predisposition,
-    TwinNode,
-    TwinSummary,
-    VitalReading,
-)
-
-
-def _rng_stream(seed_text):
-    """Deterministic byte stream from a seed string, for reproducible values."""
-    counter = 0
-    while True:
-        digest = hashlib.sha256(f"{seed_text}:{counter}".encode()).digest()
-        for byte in digest:
-            yield byte
-        counter += 1
-
-
-def _spread(stream, low, high):
-    return low + (next(stream) / 255.0) * (high - low)
+from .models import CareWorker, ConsentScope, Doctor, Medicine, OutbreakSignal
 
 
 # ---------------------------------------------------------------------------
@@ -132,222 +106,30 @@ def seed_catalog():
 
 
 # ---------------------------------------------------------------------------
-# Per-user clinical provisioning
+# Per-user provisioning — consent only
 # ---------------------------------------------------------------------------
-
-TWIN_NODES = [
-    ("brain", "Neurological", 50, 18),
-    ("heart", "Cardiovascular", 50, 33),
-    ("liver", "Hepatic", 44, 48),
-    ("kidney", "Renal", 57, 52),
-    ("metabolic", "Metabolic", 50, 62),
-    ("immune", "Immune", 50, 78),
-]
 
 CONSENT_SCOPES = [
     ("records", "Medical records",
-     "Lets Omni read your uploaded reports, diagnoses, and prescription history."),
-    ("lifestyle", "Lifestyle & wearables",
-     "Sleep, activity, heart rate, and hydration collected from your connected devices."),
+     "Lets Omni read reports and biomarkers you have added."),
+    ("lifestyle", "Lifestyle & vitals",
+     "Sleep, heart rate, hydration, and stress readings you log yourself."),
     ("family_history", "Family history",
-     "Hereditary conditions you have recorded, used to weight long-term risk."),
-    ("reports_vision", "Report image analysis",
-     "Allows Omni to extract biomarkers from scans and lab report images you upload."),
+     "Hereditary conditions you record, used to weight long-term risk."),
+    ("reports_vision", "Report analysis",
+     "Allows Omni to read biomarker values off reports you upload."),
     ("digital_twin", "Digital twin modelling",
-     "Permits your data to be combined into the predictive model of your physiology."),
+     "Permits your entered readings to be combined into a model of your physiology."),
     ("regional", "Regional health signals",
      "Shares your city (never your address) to match you against local outbreak data."),
 ]
 
 
-def _status_for(risk):
-    if risk >= 55:
-        return "warning"
-    if risk >= 30:
-        return "caution"
-    return "normal"
-
-
-def provision_user_health(user):
-    """Create a new user's clinical rows. Called once, at registration."""
-    stream = _rng_stream(user.id)
-
-    # --- 30 days of vitals -------------------------------------------------
-    today = date.today()
-    base_hr = int(_spread(stream, 62, 78))
-    base_hrv = int(_spread(stream, 32, 58))
-    base_sleep = _spread(stream, 5.6, 7.8)
-
-    for days_ago in range(29, -1, -1):
-        day = today - timedelta(days=days_ago)
-        db.session.add(VitalReading(
-            user_id=user.id,
-            recorded_on=day,
-            heart_rate=max(48, int(base_hr + _spread(stream, -7, 9))),
-            hrv_ms=max(14, int(base_hrv + _spread(stream, -11, 11))),
-            spo2=int(_spread(stream, 95, 99)),
-            sleep_hours=round(max(3.5, base_sleep + _spread(stream, -1.6, 1.4)), 1),
-            stress_score=int(_spread(stream, 22, 68)),
-            hydration_ml=int(_spread(stream, 1100, 2900)),
-        ))
-
-    # --- digital twin ------------------------------------------------------
-    node_risks = {}
-    for (key, label, x, y) in TWIN_NODES:
-        risk = round(_spread(stream, 8, 64), 1)
-        node_risks[key] = risk
-        db.session.add(TwinNode(
-            user_id=user.id, key=key, label=label, risk_pct=risk,
-            status=_status_for(risk), x_pct=x, y_pct=y,
-            note=_node_note(key, risk),
-        ))
-
-    actual_age = int(_spread(stream, 26, 52))
-    mean_risk = sum(node_risks.values()) / len(node_risks)
-    db.session.add(TwinSummary(
-        user_id=user.id,
-        health_score=int(round(100 - mean_risk * 0.82)),
-        biological_age=round(actual_age + (mean_risk - 32) * 0.14, 1),
-        actual_age=actual_age,
-    ))
-
-    # --- hero finding, driven by the worst-scoring system ------------------
-    worst_key = max(node_risks, key=node_risks.get)
-    worst_risk = node_risks[worst_key]
-    finding = _finding_for(worst_key, worst_risk)
-    db.session.add(ClinicalFinding(
-        user_id=user.id,
-        headline=finding["headline"],
-        suspected_condition=finding["condition"],
-        severity="critical" if worst_risk >= 55 else "watch" if worst_risk >= 30 else "stable",
-        reasoning_json=json.dumps(finding["reasoning"]),
-        risk_score=round(worst_risk / 10, 1),
-        risk_band=finding["band"],
-        suggested_next_json=json.dumps(finding["next"]),
-    ))
-
-    # --- predispositions ---------------------------------------------------
-    for spec in _predispositions_for(node_risks):
-        db.session.add(Predisposition(
-            user_id=user.id, condition=spec["condition"],
-            probability_pct=spec["probability"],
-            drivers_json=json.dumps(spec["drivers"]), lever=spec["lever"],
-        ))
-
-    # --- consent, granted by default at signup and revocable on the page ---
-    for (key, title, description) in CONSENT_SCOPES:
+def provision_consent(user):
+    """Create the user's consent scopes. This is the only thing registration
+    writes on their behalf — no clinical data is created for a new account."""
+    for key, title, description in CONSENT_SCOPES:
         db.session.add(ConsentScope(
             user_id=user.id, key=key, title=title, description=description, granted=True,
         ))
-
     db.session.commit()
-
-
-def _node_note(key, risk):
-    notes = {
-        "brain": "Cognitive load and sleep fragmentation are the main inputs here.",
-        "heart": "Resting heart rate and HRV trend drive this system's score.",
-        "liver": "Derived from metabolic markers and reported alcohol intake.",
-        "kidney": "Hydration consistency and filtration markers inform this node.",
-        "metabolic": "Glucose variability and body composition weigh heaviest.",
-        "immune": "Recent infection frequency and recovery time are the signal.",
-    }
-    return notes[key]
-
-
-def _finding_for(key, risk):
-    catalogue = {
-        "heart": {
-            "condition": "Early-stage hypertensive strain",
-            "reasoning": [
-                "Resting heart rate has climbed 9 bpm over the last three weeks.",
-                "HRV has fallen below your own 30-day baseline on 11 of 14 nights.",
-                "Sleep is averaging under 6 hours, which suppresses overnight recovery.",
-                "No medication currently recorded that would explain the shift.",
-            ],
-            "band": "Elevated",
-            "next": ["Ambulatory BP monitoring", "Lipid panel", "Cardiology consult"],
-        },
-        "metabolic": {
-            "condition": "Insulin resistance pattern",
-            "reasoning": [
-                "Post-meal glucose excursions are widening month over month.",
-                "Waist-to-height ratio sits above the threshold for your cohort.",
-                "Activity minutes have dropped 40% since your first recorded week.",
-            ],
-            "band": "Elevated",
-            "next": ["HbA1c", "Fasting insulin", "Dietician consult"],
-        },
-        "kidney": {
-            "condition": "Reduced filtration efficiency",
-            "reasoning": [
-                "Hydration has been below 1.5L on the majority of logged days.",
-                "Creatinine trend is drifting upward within the normal band.",
-                "Blood pressure readings compound load on filtration.",
-            ],
-            "band": "Watch",
-            "next": ["Serum creatinine", "eGFR", "Urine albumin"],
-        },
-        "liver": {
-            "condition": "Hepatic steatosis indicators",
-            "reasoning": [
-                "Metabolic markers cluster in a pattern associated with fatty liver.",
-                "Reported intake and body composition both contribute.",
-                "No viral hepatitis markers on record to explain it otherwise.",
-            ],
-            "band": "Watch",
-            "next": ["LFT panel", "Abdominal ultrasound", "Hepatology consult"],
-        },
-        "brain": {
-            "condition": "Chronic sleep debt with cognitive impact",
-            "reasoning": [
-                "Sleep duration is short and highly variable night to night.",
-                "Stress scores stay elevated well into the evening window.",
-                "Recovery metrics do not rebound on rest days.",
-            ],
-            "band": "Watch",
-            "next": ["Sleep study referral", "Stress assessment", "Neurology consult"],
-        },
-        "immune": {
-            "condition": "Depressed immune resilience",
-            "reasoning": [
-                "Recovery time from minor infections has lengthened.",
-                "Sleep and stress are both trending against immune function.",
-                "Regional influenza activity raises near-term exposure risk.",
-            ],
-            "band": "Watch",
-            "next": ["CBC with differential", "Vitamin D", "General physician review"],
-        },
-    }
-    spec = catalogue[key]
-    return {
-        "headline": (
-            "This looks like a *Critical Finding* in your health."
-            if risk >= 55
-            else "This is *worth attention* in your health."
-        ),
-        **spec,
-    }
-
-
-def _predispositions_for(node_risks):
-    return [
-        {
-            "condition": "Type 2 Diabetes",
-            "probability": round(min(88, 14 + node_risks["metabolic"] * 0.9), 1),
-            "drivers": ["Glucose variability", "Activity decline", "Family history"],
-            "lever": "Thirty minutes of post-meal walking cuts the modelled probability by roughly a fifth.",
-        },
-        {
-            "condition": "Hypertension",
-            "probability": round(min(90, 12 + node_risks["heart"] * 1.05), 1),
-            "drivers": ["Resting heart rate trend", "Sleep debt", "Sodium intake"],
-            "lever": "Consistent seven-hour sleep is the single largest modifiable input here.",
-        },
-        {
-            "condition": "Chronic Kidney Disease",
-            "probability": round(min(72, 6 + node_risks["kidney"] * 0.78), 1),
-            "drivers": ["Hydration consistency", "Blood pressure load", "Filtration markers"],
-            "lever": "Raising daily water intake to 2.5L moves this more than any medication would.",
-        },
-    ]

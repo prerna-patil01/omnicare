@@ -56,7 +56,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, initialising, signIn, signUp, signOut, isAuthenticated: !!user }),
+    // setUser lets the profile page push its saved result into the shell
+    // (avatar, greeting) without a refetch.
+    () => ({ user, setUser, initialising, signIn, signUp, signOut, isAuthenticated: !!user }),
     [user, initialising, signIn, signUp, signOut],
   );
 

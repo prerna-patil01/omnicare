@@ -65,11 +65,12 @@ def register():
             "errors": {"email": "This email is already registered."},
         }), 409
 
-    # Provision the account's clinical rows so every page has real data to
-    # read on first login rather than empty states.
-    from ..seed import provision_user_health
+    # Only consent scopes are created for a new account. A new user has no
+    # clinical data because they have not entered any — the app shows empty
+    # states until they do, rather than inventing readings to fill them.
+    from ..seed import provision_consent
 
-    provision_user_health(user)
+    provision_consent(user)
 
     return jsonify({"data": {"user": user.to_dict(), **_issue_tokens(user)}}), 201
 
