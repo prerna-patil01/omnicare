@@ -24,9 +24,23 @@ export function uploadReport(file) {
 
 export const deleteReport = (reportId) => unwrap(api.delete(`/reports/${reportId}`));
 
+export const fetchReportExtraction = (reportId) =>
+  unwrap(api.get(`/reports/${reportId}/extraction`));
+
 export const fetchConsent = () => unwrap(api.get("/consent"));
 
 export const setConsentScope = (key, granted) =>
   unwrap(api.patch(`/consent/${key}`, { granted }));
 
 export const updateProfile = (details) => unwrap(api.patch("/profile", details));
+
+// --- vitals: the only route by which clinical numbers enter the system ------
+
+export const fetchVitals = () => unwrap(api.get("/vitals"));
+
+export const logVitals = (reading) => unwrap(api.post("/vitals", reading));
+
+export const deleteVitals = (date) => unwrap(api.delete(`/vitals/${date}`));
+
+export const addBiomarker = (reportId, label, value) =>
+  unwrap(api.post(`/reports/${reportId}/biomarkers`, { label, value }));

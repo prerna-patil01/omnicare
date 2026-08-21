@@ -8,6 +8,7 @@ import { Avatar, Badge, Button } from "@/components/ui";
 
 const SECTIONS = [
   { to: "/dashboard", label: "Dashboard" },
+  { to: "/log", label: "Log Reading" },
   { to: "/omni", label: "Ask Omni" },
   { to: "/twin", label: "Digital Twin" },
   { to: "/doctors", label: "Find Doctors" },
@@ -29,6 +30,7 @@ const SEARCH_MAP = [
   { to: "/appointments", terms: ["appointment", "booking", "ride", "cancel", "visit"] },
   { to: "/care", terms: ["nurse", "asha", "physio", "dietician", "home", "sample"] },
   { to: "/insights", terms: ["sleep", "stress", "hydration", "trend", "insight", "air"] },
+  { to: "/log", terms: ["log", "enter", "record", "add reading", "vitals", "heart rate"] },
   { to: "/consent", terms: ["consent", "privacy", "permission", "data", "share"] },
 ];
 

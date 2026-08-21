@@ -40,17 +40,6 @@ def create_app(config_name=None):
     app.register_blueprint(auth_bp)
     app.register_blueprint(api_bp)
 
-    with app.app_context():
-        from .seed import seed_catalog
-
-        # Catalogue rows are reference data, not per-user state — loading them
-        # at boot keeps a fresh clone runnable without a separate seed step.
-        try:
-            seed_catalog()
-        except Exception:  # pragma: no cover - migrations may not have run yet
-            db.session.rollback()
-            app.logger.warning("Catalogue seed skipped — run `flask db upgrade` first.")
-
     _register_error_handlers(app)
     _register_jwt_handlers(app)
 

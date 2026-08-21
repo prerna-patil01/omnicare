@@ -6,6 +6,12 @@ import {
   Badge, Button, Card, EmptyNote, ErrorNote, Eyebrow, PageHeading, PageSkeleton, statusTone,
 } from "@/components/ui";
 
+// Must match BIOMARKER_RANGES on the server.
+const MARKERS = [
+  "Haemoglobin", "Fasting glucose", "Total cholesterol", "HDL",
+  "Triglycerides", "Serum creatinine", "Vitamin D", "TSH",
+];
+
 export default function Reports() {
   const [reports, setReports] = useState([]);
   const [dragging, setDragging] = useState(false);
@@ -32,9 +38,15 @@ export default function Reports() {
     try {
       const { report } = await health.uploadReport(file);
       setReports((prev) => [report, ...prev]);
-      toast.success("Report analysed", {
-        description: `${report.biomarkers.length} biomarkers extracted.`,
-      });
+      if (report.biomarkers.length) {
+        toast.success("Report read", {
+          description: `${report.biomarkers.length} values found in the file.`,
+        });
+      } else {
+        toast("Nothing could be read automatically", {
+          description: "Enter the values from the report yourself — nothing is guessed for you.",
+        });
+      }
     } catch (err) {
       if (err.code === "consent_required") {
         toast.error("Report analysis is off", {
@@ -135,6 +147,17 @@ export default function Reports() {
                           day: "numeric", month: "short", year: "numeric",
                         })}
                       </p>
+                      {report.extraction && (
+                        <p className="mt-1 text-xs" style={{ color: "var(--ink-faint)" }}>
+                          {report.extraction.status === "completed"
+                            ? `Extraction complete · ${report.extraction.pageCount} page${report.extraction.pageCount === 1 ? "" : "s"} processed`
+                            : report.extraction.status === "needs_ocr"
+                              ? "Extraction requires OCR"
+                              : report.extraction.status === "failed"
+                                ? `Extraction failed · ${report.extraction.error}`
+                                : "Extracting report…"}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <button
@@ -148,7 +171,14 @@ export default function Reports() {
                   </button>
                 </div>
 
-                <Eyebrow className="mt-6">Extracted biomarkers</Eyebrow>
+                <Eyebrow className="mt-6">Biomarkers</Eyebrow>
+                {report.biomarkers.length === 0 && (
+                  <p className="mt-2 text-sm" style={{ color: "var(--ink-muted)" }}>
+                    No values could be read out of this file. Automatic extraction only works on
+                    text reports right now — add the values below and they will be flagged against
+                    reference ranges. Nothing is filled in for you.
+                  </p>
+                )}
                 <div className="mt-3 overflow-x-auto">
                   <table className="w-full min-w-[520px] text-sm">
                     <thead>
@@ -170,13 +200,27 @@ export default function Reports() {
                             {marker.referenceRange}
                           </td>
                           <td className="py-2.5 text-right">
-                            <Badge tone={statusTone(marker.flag)}>{marker.flag}</Badge>
+                            <span className="inline-flex items-center gap-1.5">
+                              {marker.source === "manual" && (
+                                <span className="text-xs" style={{ color: "var(--ink-faint)" }}>
+                                  entered
+                                </span>
+                              )}
+                              <Badge tone={statusTone(marker.flag)}>{marker.flag}</Badge>
+                            </span>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+
+                <BiomarkerEntry
+                  reportId={report.id}
+                  onSaved={(updated) =>
+                    setReports((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+                  }
+                />
 
                 {report.observation && (
                   <div className="mt-5 rounded-2xl p-4" style={{ backgroundColor: "var(--surface-2)" }}>
@@ -190,5 +234,64 @@ export default function Reports() {
         )}
       </div>
     </div>
+  );
+}
+
+function BiomarkerEntry({ reportId, onSaved }) {
+  const [label, setLabel] = useState(MARKERS[0]);
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleAdd(event) {
+    event.preventDefault();
+    if (!value.trim()) return;
+    setSaving(true);
+    try {
+      const { report } = await health.addBiomarker(reportId, label, value);
+      onSaved(report);
+      setValue("");
+      toast.success(`${label} recorded`);
+    } catch (err) {
+      toast.error(err.errors?.value || err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleAdd} className="mt-4 flex flex-wrap items-end gap-2">
+      <div className="min-w-[170px] flex-1">
+        <label htmlFor={`marker-${reportId}`} className="label-eyebrow">
+          Add a value from the report
+        </label>
+        <select
+          id={`marker-${reportId}`}
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          className="mt-1.5 w-full rounded-xl px-3.5 py-2.5 text-sm outline-none"
+          style={{ backgroundColor: "var(--surface-2)", border: "1px solid var(--border)" }}
+        >
+          {MARKERS.map((marker) => (
+            <option key={marker} value={marker}>
+              {marker}
+            </option>
+          ))}
+        </select>
+      </div>
+      <input
+        type="number"
+        step="0.1"
+        inputMode="decimal"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="Value"
+        aria-label={`${label} value`}
+        className="w-28 rounded-xl px-3.5 py-2.5 text-sm outline-none"
+        style={{ backgroundColor: "var(--surface-2)", border: "1px solid var(--border)" }}
+      />
+      <Button type="submit" size="sm" disabled={saving || !value.trim()}>
+        {saving ? "Saving…" : "Add"}
+      </Button>
+    </form>
   );
 }

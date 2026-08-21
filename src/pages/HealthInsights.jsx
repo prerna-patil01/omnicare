@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as health from "@/services/healthService";
 import {
-  Card, ErrorNote, Eyebrow, PageHeading, PageSkeleton,
+  Card, ErrorNote, Eyebrow, NeedsData, PageHeading, PageSkeleton,
 } from "@/components/ui";
 
 const RANGES = [
@@ -55,7 +55,26 @@ export default function HealthInsights() {
   if (error) return <ErrorNote message={error} onRetry={load} />;
   if (!data) return null;
 
-  const { series, summary, outbreak } = data;
+  const { readings, summary, outbreak, readingCount, minForTrend } = data;
+  const series = readings || [];
+
+  if (!series.length) {
+    return (
+      <div>
+        <PageHeading
+          eyebrow="Trends"
+          title="Health insights"
+          subtitle="Charts of what you have logged. Nothing is shown until there is something to chart."
+        />
+        <NeedsData
+          title="No readings to chart"
+          body="A trend needs points. Log your sleep, heart rate, hydration, or stress and the charts fill in from your own entries."
+          have={readingCount}
+          need={minForTrend}
+        />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -89,7 +108,12 @@ export default function HealthInsights() {
             key={metric.key}
             metric={metric}
             series={series}
-            average={summary[metric.key === "hydrationMl" ? "hydrationMl" : metric.key === "sleepHours" ? "sleep" : metric.key]}
+            average={summary?.[
+              metric.key === "hydrationMl" ? "hydrationMl"
+                : metric.key === "sleepHours" ? "sleep"
+                : metric.key === "heartRate" ? "heartRate"
+                : "stress"
+            ]}
             stroke={dark ? metric.dark : metric.light}
           />
         ))}
@@ -99,12 +123,12 @@ export default function HealthInsights() {
         <Card className="p-6">
           <Eyebrow>Heart health summary</Eyebrow>
           <div className="mt-4 flex flex-wrap gap-8">
-            <Stat label="Mean resting HR" value={summary.heartRate} unit="bpm" />
-            <Stat label="Mean HRV" value={summary.hrv} unit="ms" />
+            <Stat label="Mean resting HR" value={summary?.heartRate ?? "—"} unit="bpm" />
+            <Stat label="Mean HRV" value={summary?.hrv ?? "—"} unit="ms" />
           </div>
           <p className="mt-4 text-sm" style={{ color: "var(--ink-muted)" }}>
-            HRV is the more sensitive of the two — a falling trend usually shows up here weeks
-            before resting heart rate moves.
+            Computed from the {readingCount} readings you have logged. HRV is the more sensitive
+            of the two — a falling trend usually shows up there before resting heart rate moves.
           </p>
         </Card>
 
@@ -144,11 +168,28 @@ function Stat({ label, value, unit, tone }) {
 }
 
 function TrendCard({ metric, series, average, stroke }) {
+  // Only points the user actually entered for this measure. A day where they
+  // logged sleep but not hydration is absent from the hydration chart rather
+  // than plotted as zero.
   const points = useMemo(
-    () => series.map((row) => ({ date: row.date, value: row[metric.key] })),
+    () =>
+      series
+        .filter((row) => row[metric.key] !== null && row[metric.key] !== undefined)
+        .map((row) => ({ date: row.date, value: row[metric.key] })),
     [series, metric.key],
   );
   const latest = points[points.length - 1];
+
+  if (!points.length) {
+    return (
+      <Card className="p-6">
+        <h3 className="text-lg font-bold">{metric.title}</h3>
+        <p className="mt-3 text-sm" style={{ color: "var(--ink-faint)" }}>
+          You have not logged this measure yet.
+        </p>
+      </Card>
+    );
+  }
 
   return (
     <Card className="p-6">

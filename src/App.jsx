@@ -10,6 +10,7 @@ import Dashboard from "@/pages/Dashboard";
 import DigitalTwin from "@/pages/DigitalTwin";
 import FindDoctors from "@/pages/FindDoctors";
 import HealthInsights from "@/pages/HealthInsights";
+import LogVitals from "@/pages/LogVitals";
 import Login from "@/pages/Login";
 import Pharmacy from "@/pages/Pharmacy";
 import Profile from "@/pages/Profile";
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="/pharmacy" element={<Pharmacy />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/insights" element={<HealthInsights />} />
+        <Route path="/log" element={<LogVitals />} />
         <Route path="/consent" element={<Consent />} />
         <Route path="/profile" element={<Profile />} />
       </Route>

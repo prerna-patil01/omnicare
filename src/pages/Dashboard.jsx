@@ -4,7 +4,7 @@ import { Activity, ArrowDownRight, ArrowUpRight, Bookmark, Heart, Moon, Wind } f
 import { toast } from "sonner";
 import * as health from "@/services/healthService";
 import {
-  Badge, Button, Card, Emphasised, ErrorNote, Eyebrow, PageSkeleton,
+  Badge, Button, Card, Emphasised, ErrorNote, Eyebrow, NeedsData, PageSkeleton,
 } from "@/components/ui";
 
 export default function Dashboard() {
@@ -24,21 +24,11 @@ export default function Dashboard() {
 
   useEffect(load, [load]);
 
-  async function handleSave() {
-    try {
-      const { finding } = await health.toggleSavedFinding(data.finding.id);
-      setData((prev) => ({ ...prev, finding }));
-      toast.success(finding.saved ? "Reasoning saved" : "Removed from saved");
-    } catch (err) {
-      toast.error(err.message);
-    }
-  }
-
   if (loading) return <PageSkeleton />;
   if (error) return <ErrorNote message={error} onRetry={load} />;
   if (!data) return null;
 
-  const { greeting, finding, vitals, outbreak, twin } = data;
+  const { greeting, finding, vitals, outbreak, twin, hasReadings, readingCount, readingsNeeded } = data;
 
   return (
     <div className="flex flex-col gap-6">
@@ -49,17 +39,28 @@ export default function Dashboard() {
         <h1 className="mt-1.5 text-[2.1rem]">Good to see you, {greeting.firstName}.</h1>
       </div>
 
-      {finding && <HeroPanel finding={finding} onSave={handleSave} />}
+      {finding ? (
+        <HeroPanel finding={finding} />
+      ) : (
+        <NeedsData
+          title="No assessment yet"
+          body="Omni will not tell you anything about your health until you have given it something real to read. Log a few readings and an assessment appears here, showing the measurements it came from."
+          have={readingCount}
+          need={readingsNeeded}
+        />
+      )}
 
-      <section>
-        <Eyebrow className="mb-3">Today's vitals</Eyebrow>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <VitalCard icon={Heart} label="Heart rate" vital={vitals.heartRate} />
-          <VitalCard icon={Activity} label="HRV" vital={vitals.hrv} />
-          <VitalCard icon={Wind} label="SpO₂" vital={vitals.spo2} />
-          <VitalCard icon={Moon} label="Sleep" vital={vitals.sleep} />
-        </div>
-      </section>
+      {hasReadings && (
+        <section>
+          <Eyebrow className="mb-3">Latest readings</Eyebrow>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <VitalCard icon={Heart} label="Heart rate" vital={vitals.heartRate} />
+            <VitalCard icon={Activity} label="HRV" vital={vitals.hrv} />
+            <VitalCard icon={Wind} label="SpO₂" vital={vitals.spo2} />
+            <VitalCard icon={Moon} label="Sleep" vital={vitals.sleep} />
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {outbreak && <OutbreakCard outbreak={outbreak} />}
@@ -69,7 +70,7 @@ export default function Dashboard() {
   );
 }
 
-function HeroPanel({ finding, onSave }) {
+function HeroPanel({ finding }) {
   const bandTone =
     finding.severity === "critical" ? "rose" : finding.severity === "watch" ? "amber" : "sage";
 
@@ -95,7 +96,7 @@ function HeroPanel({ finding, onSave }) {
             <Emphasised text={finding.headline} />
           </h2>
           <p className="mt-2 text-lg" style={{ color: "var(--hero-fg-muted)" }}>
-            Suspected: {finding.suspectedCondition}
+            Lead system: {finding.leadSystem}
           </p>
 
           <ul className="mt-5 flex flex-col gap-2.5">
@@ -117,15 +118,13 @@ function HeroPanel({ finding, onSave }) {
             <Link to="/omni">
               <Button variant="onHero">Discuss with Omni</Button>
             </Link>
-            <button
-              type="button"
-              onClick={onSave}
-              className="inline-flex items-center gap-1.5 text-sm font-semibold"
+            <span
+              className="num inline-flex items-center gap-1.5 text-sm"
               style={{ color: "var(--hero-fg-muted)" }}
             >
-              <Bookmark size={15} fill={finding.saved ? "currentColor" : "none"} />
-              {finding.saved ? "Saved" : "Save reasoning"}
-            </button>
+              <Bookmark size={15} />
+              From {finding.basedOnReadings} of your readings
+            </span>
           </div>
         </div>
 
@@ -162,6 +161,7 @@ function HeroPanel({ finding, onSave }) {
 
 function VitalCard({ icon: Icon, label, vital }) {
   if (!vital) return null;
+  const unknown = vital.trend === null || vital.trend === undefined;
   const rising = vital.trend > 0;
   const flat = vital.trend === 0;
 
@@ -179,11 +179,13 @@ function VitalCard({ icon: Icon, label, vital }) {
       </p>
       <p
         className="num mt-2 flex items-center gap-1 text-xs"
-        style={{ color: flat ? "var(--ink-faint)" : rising ? "var(--amber)" : "var(--sage)" }}
+        style={{
+          color: unknown || flat ? "var(--ink-faint)" : rising ? "var(--amber)" : "var(--sage)",
+        }}
       >
-        {!flat &&
+        {!unknown && !flat &&
           (rising ? <ArrowUpRight size={13} aria-hidden="true" /> : <ArrowDownRight size={13} aria-hidden="true" />)}
-        {flat ? "No change" : `${rising ? "+" : ""}${vital.trend} vs yesterday`}
+        {unknown ? "No earlier reading" : flat ? "No change" : `${rising ? "+" : ""}${vital.trend} vs previous`}
       </p>
     </Card>
   );
@@ -208,9 +210,6 @@ function OutbreakCard({ outbreak }) {
 }
 
 function TwinPreviewCard({ twin }) {
-  const drift = (twin.biologicalAge - twin.actualAge).toFixed(1);
-  const older = Number(drift) > 0;
-
   return (
     <Card className="flex flex-col p-6">
       <Eyebrow>Digital Twin</Eyebrow>
@@ -223,15 +222,12 @@ function TwinPreviewCard({ twin }) {
       </p>
       <div className="mt-5 flex flex-wrap gap-6">
         <Figure label="Health score" value={`${twin.healthScore}/100`} />
-        <Figure
-          label="Biological age"
-          value={`${twin.biologicalAge}`}
-          tone={older ? "var(--amber)" : "var(--sage)"}
-        />
-        <Figure label="Actual age" value={twin.actualAge} />
+        <Figure label="Systems scored" value={`${twin.measuredSystems}/${twin.totalSystems}`} />
+        <Figure label="From readings" value={twin.basedOnReadings} />
       </div>
       <p className="mt-3 text-sm" style={{ color: "var(--ink-muted)" }}>
-        Reading {Math.abs(drift)} years {older ? "older" : "younger"} than your actual age.
+        {twin.measuredSystems} of {twin.totalSystems} systems can be scored from what you have
+        logged. The rest need bloodwork.
       </p>
       <Link
         to="/twin"

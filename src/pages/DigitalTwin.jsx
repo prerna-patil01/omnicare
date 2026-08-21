@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import * as health from "@/services/healthService";
 import {
-  Badge, Card, Emphasised, ErrorNote, Eyebrow, PageHeading, PageSkeleton, statusColor, statusTone,
+  Badge, Card, Emphasised, ErrorNote, Eyebrow, NeedsData, PageHeading, PageSkeleton,
+  statusColor, statusTone,
 } from "@/components/ui";
 
 export default function DigitalTwin() {
@@ -20,7 +21,7 @@ export default function DigitalTwin() {
       .fetchTwin()
       .then((result) => {
         setData(result);
-        setActiveKey(result.nodes[0]?.key ?? null);
+        setActiveKey(result.nodes.find((n) => n.measured)?.key ?? null);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -38,9 +39,26 @@ export default function DigitalTwin() {
   if (error) return <ErrorNote message={error} onRetry={load} />;
   if (!data) return null;
 
-  const { summary, nodes, predispositions } = data;
+  const { summary, nodes, predispositions, sufficient, readingCount, readingsNeeded } = data;
   const active = nodes.find((n) => n.key === activeKey);
-  const drift = summary ? (summary.biologicalAge - summary.actualAge).toFixed(1) : 0;
+
+  if (!sufficient) {
+    return (
+      <div>
+        <PageHeading
+          eyebrow="Digital Twin"
+          title={<Emphasised text="*Your live model*" />}
+          subtitle="The twin is computed from readings you enter. It stays empty until there are enough of them to mean anything."
+        />
+        <NeedsData
+          title="Not enough readings to model yet"
+          body="Scoring a body system from two or three data points would be guesswork dressed up as a number. Seven readings is the floor for saying anything about a trend."
+          have={readingCount}
+          need={readingsNeeded}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -61,7 +79,7 @@ export default function DigitalTwin() {
                 <div className="flex items-center gap-2">
                   <Badge tone="sage">Live model</Badge>
                   <span className="num text-xs" style={{ color: "var(--ink-faint)" }}>
-                    {summary.modelVersion}
+                    computed on read
                   </span>
                 </div>
               </div>
@@ -76,22 +94,19 @@ export default function DigitalTwin() {
 
               <div className="mt-6 flex items-end gap-8">
                 <div>
-                  <Eyebrow>Biological age</Eyebrow>
-                  <p
-                    className="num mt-1 text-2xl font-bold"
-                    style={{ color: drift > 0 ? "var(--amber)" : "var(--sage)" }}
-                  >
-                    {summary.biologicalAge}
+                  <Eyebrow>Systems scored</Eyebrow>
+                  <p className="num mt-1 text-2xl font-bold">
+                    {summary.measuredSystems}/{summary.totalSystems}
                   </p>
                 </div>
                 <div>
-                  <Eyebrow>Actual age</Eyebrow>
-                  <p className="num mt-1 text-2xl font-bold">{summary.actualAge}</p>
+                  <Eyebrow>From readings</Eyebrow>
+                  <p className="num mt-1 text-2xl font-bold">{summary.basedOnReadings}</p>
                 </div>
-                <p className="pb-1 text-sm" style={{ color: "var(--ink-muted)" }}>
-                  {Math.abs(drift)} years {drift > 0 ? "older" : "younger"}
-                </p>
               </div>
+              <p className="num mt-3 text-sm" style={{ color: "var(--ink-faint)" }}>
+                {summary.firstReading} to {summary.lastReading}
+              </p>
             </Card>
           )}
 
@@ -108,26 +123,35 @@ export default function DigitalTwin() {
                   <div className="flex items-baseline justify-between gap-3">
                     <span
                       className="text-sm font-semibold"
-                      style={{ color: node.key === activeKey ? "var(--primary)" : "var(--ink)" }}
+                      style={{
+                        color: !node.measured
+                          ? "var(--ink-faint)"
+                          : node.key === activeKey ? "var(--primary)" : "var(--ink)",
+                      }}
                     >
                       {node.label}
                     </span>
-                    <span className="num text-sm" style={{ color: statusColor(node.status) }}>
-                      {node.riskPct}%
+                    <span
+                      className="num text-sm"
+                      style={{ color: node.measured ? statusColor(node.status) : "var(--ink-faint)" }}
+                    >
+                      {node.measured ? `${node.riskPct}%` : "Not measured"}
                     </span>
                   </div>
                   <div
                     className="mt-1.5 h-1.5 overflow-hidden rounded-full"
                     style={{ backgroundColor: "var(--surface-2)" }}
                   >
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: revealed ? `${node.riskPct}%` : "0%",
-                        backgroundColor: statusColor(node.status),
-                        transition: "width 900ms cubic-bezier(0.22, 1, 0.36, 1)",
-                      }}
-                    />
+                    {node.measured && (
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: revealed ? `${node.riskPct}%` : "0%",
+                          backgroundColor: statusColor(node.status),
+                          transition: "width 900ms cubic-bezier(0.22, 1, 0.36, 1)",
+                        }}
+                      />
+                    )}
                   </div>
                 </button>
               ))}
@@ -142,7 +166,7 @@ export default function DigitalTwin() {
               </div>
               <h3 className="mt-2 text-xl">{active.label}</h3>
               <p className="num mt-1 text-3xl font-bold" style={{ color: statusColor(active.status) }}>
-                {active.riskPct}%
+                {active.measured ? `${active.riskPct}%` : "Not measured"}
               </p>
               <p className="mt-3 text-sm" style={{ color: "var(--ink-muted)" }}>
                 {active.note}
@@ -161,18 +185,21 @@ export default function DigitalTwin() {
             <Card key={item.id} className="flex flex-col p-6">
               <h3 className="text-lg">{item.condition}</h3>
               <p className="num mt-2 text-[2.6rem] font-bold leading-none" style={{ color: "var(--accent)" }}>
-                {item.probabilityPct}%
+                {item.signalPct}%
               </p>
-              <Eyebrow className="mt-1">10-year probability</Eyebrow>
+              <Eyebrow className="mt-1">Signal strength</Eyebrow>
 
-              <Eyebrow className="mt-5">Drivers</Eyebrow>
+              <Eyebrow className="mt-5">Computed from</Eyebrow>
               <ul className="mt-1.5 flex flex-col gap-1">
-                {item.drivers.map((driver) => (
-                  <li key={driver} className="text-sm" style={{ color: "var(--ink-muted)" }}>
+                {item.basedOn.map((driver) => (
+                  <li key={driver} className="num text-sm" style={{ color: "var(--ink-muted)" }}>
                     {driver}
                   </li>
                 ))}
               </ul>
+              <p className="mt-3 text-xs" style={{ color: "var(--ink-faint)" }}>
+                {item.caveat}
+              </p>
 
               <div
                 className="mt-auto rounded-2xl p-4"
@@ -242,13 +269,15 @@ function Figure({ nodes, activeKey, onSelect }) {
 
         {nodes.map((node) => {
           const isActive = node.key === activeKey;
-          const colour = statusColor(node.status);
+          const colour = node.measured ? statusColor(node.status) : "var(--ink-faint)";
           return (
             <button
               key={node.key}
               type="button"
               onClick={() => onSelect(node.key)}
-              aria-label={`${node.label} — ${node.riskPct}% risk`}
+              aria-label={
+                node.measured ? `${node.label} — ${node.riskPct}% risk` : `${node.label} — not measured`
+              }
               aria-pressed={isActive}
               className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full"
               style={{
@@ -257,7 +286,7 @@ function Figure({ nodes, activeKey, onSelect }) {
                 width: isActive ? 30 : 22,
                 height: isActive ? 30 : 22,
                 backgroundColor: colour,
-                opacity: isActive ? 1 : 0.62,
+                opacity: !node.measured ? 0.3 : isActive ? 1 : 0.62,
                 boxShadow: `0 0 ${isActive ? 26 : 14}px ${colour}`,
                 transition: "all 260ms ease",
                 animation: "twinPulse 2.8s ease-in-out infinite",

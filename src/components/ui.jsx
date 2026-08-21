@@ -196,3 +196,41 @@ export const statusColor = (status) =>
 
 export const rupees = (value) =>
   `₹${Number(value ?? 0).toLocaleString("en-IN")}`;
+
+/**
+ * Shown wherever a page has nothing to display because the user has not
+ * entered data yet. Deliberately prominent: an empty state is the honest
+ * answer, and it must not look like a loading failure.
+ */
+export function NeedsData({ title, body, have, need, action = "/log" }) {
+  const pct = need ? Math.min(100, Math.round(((have || 0) / need) * 100)) : null;
+  return (
+    <Card className="flex flex-col items-center px-6 py-14 text-center">
+      <h2 className="text-2xl">{title}</h2>
+      <p className="mt-3 max-w-md" style={{ color: "var(--ink-muted)" }}>
+        {body}
+      </p>
+
+      {pct !== null && (
+        <div className="mt-6 w-full max-w-xs">
+          <div
+            className="h-1.5 overflow-hidden rounded-full"
+            style={{ backgroundColor: "var(--surface-2)" }}
+          >
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${pct}%`, backgroundColor: "var(--primary)", transition: "width 600ms" }}
+            />
+          </div>
+          <p className="num mt-2 text-sm" style={{ color: "var(--ink-faint)" }}>
+            {have || 0} of {need} readings
+          </p>
+        </div>
+      )}
+
+      <a href={action} className="mt-7">
+        <Button>Log a reading</Button>
+      </a>
+    </Card>
+  );
+}

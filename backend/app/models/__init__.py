@@ -5,11 +5,9 @@ from .activity import Appointment, CartItem, ConsentScope, Conversation, Message
 from .catalog import CareWorker, Doctor, Medicine, OutbreakSignal
 from .health import (
     Biomarker,
-    ClinicalFinding,
-    Predisposition,
     Report,
-    TwinNode,
-    TwinSummary,
+    ReportExtraction,
+    ReportPage,
     VitalReading,
 )
 from .user import User
@@ -19,17 +17,15 @@ __all__ = [
     "Biomarker",
     "CareWorker",
     "CartItem",
-    "ClinicalFinding",
     "ConsentScope",
     "Conversation",
     "Doctor",
     "Medicine",
     "Message",
     "OutbreakSignal",
-    "Predisposition",
     "Report",
-    "TwinNode",
-    "TwinSummary",
+    "ReportExtraction",
+    "ReportPage",
     "User",
     "VitalReading",
 ]

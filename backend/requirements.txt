@@ -14,7 +14,9 @@ Jinja2==3.1.6
 Mako==1.4.1
 MarkupSafe==3.0.3
 PyJWT==2.13.0
+PyMuPDF==1.26.7
 python-dotenv==1.2.2
+pytest==8.3.5
 SQLAlchemy==2.0.51
 typing_extensions==4.16.0
 Werkzeug==3.1.8
